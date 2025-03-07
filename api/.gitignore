@@ -1,0 +1,9 @@
+# Custom
+**/storage/
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
+**/swagger-output.json
+**/logs/
+**/.env
