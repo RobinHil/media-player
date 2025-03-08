@@ -22,7 +22,6 @@ const AudioPlayer = ({ src, title, thumbnail }) => {
       'mute', // Bouton de sourdine
       'volume', // Contrôle du volume
       'settings', // Bouton de paramètres
-      'fullscreen', // Bouton plein écran
     ],
     i18n: {
       restart: 'Redémarrer',
@@ -122,7 +121,7 @@ const AudioPlayer = ({ src, title, thumbnail }) => {
                   sources: [
                     {
                       src: src,
-                      type: 'audio/mp3' // Ou determiner dynamiquement en fonction de l'extension
+                      type: 'audio/mp3' // Ou déterminer dynamiquement en fonction de l'extension
                     }
                   ]
                 }}

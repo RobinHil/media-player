@@ -177,7 +177,7 @@ const MediaItem = ({ item, onClick }) => {
             ${item.type === 'image' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : ''}
             ${item.type === 'folder' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : ''}
           `}>
-            <div className="mr-1.5 h-2 w-2">
+            <div className="mr-1.5 h-3 w-3">
               {getIcon()}
             </div>
             {item.type.charAt(0).toUpperCase() + item.type.slice(1)}

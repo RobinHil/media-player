@@ -24,16 +24,15 @@ const QuickStats = ({ collections = 0, favorites = 0 }) => {
         // Dans une application réelle, nous aurions une API dédiée pour les statistiques
         // Ici, nous simulons en faisant des requêtes séparées
         
-        // Récupérer le nombre de vidéos
-        const videosResponse = await mediaService.getFiles('', 'video');
+        // Récupérer tous les types de médias en parallèle pour être plus efficace
+        const [videosResponse, audiosResponse, imagesResponse] = await Promise.all([
+          mediaService.getFiles('', 'video'),
+          mediaService.getFiles('', 'audio'),
+          mediaService.getFiles('', 'image')
+        ]);
+        
         const totalVideos = videosResponse.files?.length || 0;
-        
-        // Récupérer le nombre d'audios
-        const audiosResponse = await mediaService.getFiles('', 'audio');
         const totalAudios = audiosResponse.files?.length || 0;
-        
-        // Récupérer le nombre d'images
-        const imagesResponse = await mediaService.getFiles('', 'image');
         const totalImages = imagesResponse.files?.length || 0;
         
         // Calculer le nombre d'éléments ajoutés récemment (7 derniers jours)
@@ -47,6 +46,7 @@ const QuickStats = ({ collections = 0, favorites = 0 }) => {
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         
         const recentlyAdded = allFiles.filter(file => {
+          if (!file.modified) return false;
           const modifiedDate = new Date(file.modified);
           return modifiedDate >= oneWeekAgo;
         }).length;
