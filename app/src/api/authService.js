@@ -1,5 +1,6 @@
 import apiClient from './apiClient';
 import { setTokens, clearTokens } from '../utils/auth';
+import config from '../config';
 
 /**
  * Service d'authentification
@@ -56,7 +57,7 @@ const authService = {
   async logout() {
     try {
       // Récupérer le refresh token avant de le supprimer
-      const refreshToken = localStorage.getItem('media_vault_refresh_token');
+      const refreshToken = localStorage.getItem(config.auth.refreshTokenStorageKey);
       
       // Nettoyer les tokens côté client
       clearTokens();
@@ -122,12 +123,29 @@ const authService = {
   },
   
   /**
+   * Rafraîchit le token d'authentification
+   * @param {string} refreshToken - Token de rafraîchissement
+   * @returns {Promise} Promesse résolue avec le nouveau token
+   */
+  async refreshToken(refreshToken) {
+    try {
+      const response = await apiClient.post('/auth/refresh-token', { refreshToken });
+      const { token, refreshToken: newRefreshToken, expiresIn } = response.data;
+      setTokens(token, newRefreshToken, expiresIn);
+      return response.data;
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement du token:', error);
+      throw error;
+    }
+  },
+  
+  /**
    * Vérifier si l'utilisateur est authentifié
    * @returns {boolean} True si l'utilisateur est authentifié
    */
   isAuthenticated() {
-    const token = localStorage.getItem('media_vault_token');
-    const expiry = localStorage.getItem('media_vault_token_expiry');
+    const token = localStorage.getItem(config.auth.tokenStorageKey);
+    const expiry = localStorage.getItem(config.auth.tokenExpiryKey);
     
     if (!token || !expiry) {
       return false;

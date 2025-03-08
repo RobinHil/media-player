@@ -11,6 +11,11 @@ import MediaItemMenu from './MediaItemMenu';
 const MediaItem = ({ item, onClick }) => {
   const [showMenu, setShowMenu] = useState(false);
 
+  // S'assurer que l'élément existe
+  if (!item) {
+    return null;
+  }
+
   // Formater la taille du fichier
   const formatFileSize = (bytes) => {
     if (!bytes) return 'N/A';
@@ -70,6 +75,10 @@ const MediaItem = ({ item, onClick }) => {
 
   // Déterminer l'URL de la miniature
   const getThumbnailUrl = () => {
+    if (!item || !item.path) {
+      return null;
+    }
+    
     if (item.thumbnail) {
       return item.thumbnail;
     }
@@ -85,6 +94,10 @@ const MediaItem = ({ item, onClick }) => {
 
   // Construire l'URL de détail pour les différents types
   const getDetailUrl = () => {
+    if (!item || !item.path) {
+      return '/';
+    }
+    
     if (item.type === 'folder') {
       return `/browse?path=${encodeURIComponent(item.path)}`;
     }

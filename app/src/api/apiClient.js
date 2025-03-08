@@ -13,12 +13,12 @@ const apiClient = axios.create({
 
 // Intercepteur de requêtes pour ajouter le token d'authentification
 apiClient.interceptors.request.use(
-  async (config) => {
+  async (reqConfig) => {
     const token = getToken();
     if (token) {
-      config.headers.Authorization = `${config.auth?.tokenType || 'Bearer'} ${token}`;
+      reqConfig.headers.Authorization = `${config.auth.tokenType} ${token}`;
     }
-    return config;
+    return reqConfig;
   },
   (error) => Promise.reject(error)
 );
