@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   
   // Hooks de navigation
   const navigate = useNavigate();
@@ -24,6 +25,8 @@ export const AuthProvider = ({ children }) => {
    * Initialise l'état d'authentification au chargement
    */
   const initAuth = useCallback(async () => {
+    if (authInitialized) return;
+    
     setLoading(true);
     setError(null);
     
@@ -37,13 +40,17 @@ export const AuthProvider = ({ children }) => {
             const refreshToken = getRefreshToken();
             if (refreshToken) {
               // Appeler l'API pour rafraîchir le token
-              const response = await authService.refreshToken(refreshToken);
+              await authService.refreshToken(refreshToken);
               // Si succès, les nouveaux tokens seront stockés par le service
             }
           } catch (refreshError) {
             console.error('Erreur lors du rafraîchissement automatique du token:', refreshError);
-            // En cas d'échec du rafraîchissement, on continue avec le token actuel
-            // Il sera géré par l'intercepteur d'Axios si nécessaire
+            // En cas d'échec du rafraîchissement, effacer les tokens et rediriger vers la connexion
+            authService.logout();
+            setUser(null);
+            setAuthInitialized(true);
+            setLoading(false);
+            return;
           }
         }
         
@@ -58,13 +65,45 @@ export const AuthProvider = ({ children }) => {
       setError(err.message);
       setUser(null);
     } finally {
+      setAuthInitialized(true);
       setLoading(false);
     }
-  }, []);
+  }, [authInitialized]);
   
   // Initialiser l'authentification au montage
   useEffect(() => {
     initAuth();
+    
+    // Ajouter un gestionnaire d'événements pour stocker l'état d'authentification entre les onglets
+    const handleStorageChange = (e) => {
+      if (e.key === 'auth_logout') {
+        setUser(null);
+      } else if (e.key === 'auth_login') {
+        initAuth();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Configurer un intervalle pour vérifier et rafraîchir le token
+    const tokenRefreshInterval = setInterval(() => {
+      if (isTokenValid() && shouldRefreshToken()) {
+        const refreshToken = getRefreshToken();
+        if (refreshToken) {
+          authService.refreshToken(refreshToken)
+            .catch(error => {
+              console.error('Erreur lors du rafraîchissement périodique du token:', error);
+              // En cas d'erreur lors du rafraîchissement périodique, on ne déconnecte pas
+              // l'utilisateur, on attendra la prochaine vérification
+            });
+        }
+      }
+    }, 4 * 60 * 1000); // Vérifier toutes les 4 minutes
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(tokenRefreshInterval);
+    };
   }, [initAuth]);
   
   /**
@@ -81,6 +120,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const userData = await authService.login(email, password, rememberMe);
       setUser(userData);
+      
+      // Déclencher un événement pour synchroniser tous les onglets
+      localStorage.setItem('auth_login', Date.now().toString());
+      // Et le supprimer immédiatement (pour que l'événement soit toujours déclenché)
+      localStorage.removeItem('auth_login');
+      
       return userData;
     } catch (err) {
       setError(err.message || 'Échec de la connexion');
@@ -99,6 +144,12 @@ export const AuthProvider = ({ children }) => {
     try {
       await authService.logout();
       setUser(null);
+      
+      // Déclencher un événement pour synchroniser tous les onglets
+      localStorage.setItem('auth_logout', Date.now().toString());
+      // Et le supprimer immédiatement (pour que l'événement soit toujours déclenché)
+      localStorage.removeItem('auth_logout');
+      
       navigate('/login');
     } catch (err) {
       console.error('Erreur lors de la déconnexion:', err);
@@ -141,8 +192,8 @@ export const AuthProvider = ({ children }) => {
    * @returns {boolean} True si l'utilisateur est authentifié
    */
   const isAuthenticated = useCallback(() => {
-    return !!user && isTokenValid();
-  }, [user]);
+    return isTokenValid();
+  }, []);
   
   // Valeur du contexte
   const value = useMemo(() => ({
@@ -156,8 +207,9 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     isAdmin: user?.role === 'admin',
     isEditor: user?.role === 'editor' || user?.role === 'admin',
-    checkRole
-  }), [user, loading, error, login, logout, register, initAuth, isAuthenticated, checkRole]);
+    checkRole,
+    authInitialized
+  }), [user, loading, error, login, logout, register, initAuth, isAuthenticated, checkRole, authInitialized]);
   
   return (
     <AuthContext.Provider value={value}>

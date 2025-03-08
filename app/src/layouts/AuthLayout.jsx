@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -8,12 +8,31 @@ import { useTheme } from '../contexts/ThemeContext';
  * @returns {JSX.Element} Composant de layout
  */
 const AuthLayout = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, authInitialized, initAuth } = useAuth();
   const { isDarkTheme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  
+  // Initialiser l'authentification si nécessaire
+  useEffect(() => {
+    if (!authInitialized) {
+      initAuth();
+    }
+  }, [authInitialized, initAuth]);
   
   // Si l'utilisateur est déjà authentifié, rediriger vers la page d'accueil
-  if (!loading && isAuthenticated()) {
-    return <Navigate to="/" replace />;
+  useEffect(() => {
+    if (!loading && authInitialized && isAuthenticated()) {
+      navigate('/', { replace: true });
+    }
+  }, [loading, authInitialized, isAuthenticated, navigate]);
+  
+  // Si en chargement, afficher un indicateur
+  if (loading || !authInitialized) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-dark-800 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      </div>
+    );
   }
   
   return (

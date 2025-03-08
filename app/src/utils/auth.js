@@ -94,7 +94,7 @@ export const isTokenValid = () => {
     // Vérifier la validité du token (format JWT)
     try {
       const decoded = jwtDecode(token);
-      return !!decoded;
+      return !!decoded && decoded.exp * 1000 > Date.now();
     } catch (e) {
       return false;
     }

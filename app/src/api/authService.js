@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import { setTokens, clearTokens } from '../utils/auth';
+import { setTokens, clearTokens, getToken, getRefreshToken } from '../utils/auth';
 import config from '../config';
 
 /**
@@ -26,7 +26,11 @@ const authService = {
       // Stocker les tokens, toujours, indépendamment de rememberMe
       // L'option rememberMe est transmise au serveur pour qu'il définisse une expiration plus longue
       // mais côté client, on doit toujours stocker le token pour la session actuelle
-      setTokens(token, refreshToken, expiresIn);
+      const success = setTokens(token, refreshToken, expiresIn);
+      
+      if (!success) {
+        throw new Error('Échec du stockage des tokens d\'authentification');
+      }
       
       return user;
     } catch (error) {
@@ -57,13 +61,20 @@ const authService = {
   async logout() {
     try {
       // Récupérer le refresh token avant de le supprimer
-      const refreshToken = localStorage.getItem(config.auth.refreshTokenStorageKey);
+      const refreshToken = getRefreshToken();
       
       // Nettoyer les tokens côté client
       clearTokens();
       
-      // Informer le serveur de la déconnexion
-      await apiClient.post('/auth/logout', { refreshToken });
+      // Informer le serveur de la déconnexion si un refresh token existe
+      if (refreshToken) {
+        try {
+          await apiClient.post('/auth/logout', { refreshToken });
+        } catch (apiError) {
+          console.error('Erreur lors de la révocation du token côté serveur:', apiError);
+          // On continue malgré tout, car les tokens ont déjà été effacés côté client
+        }
+      }
       
       return true;
     } catch (error) {
@@ -129,9 +140,15 @@ const authService = {
    */
   async refreshToken(refreshToken) {
     try {
+      // Utiliser axios directement pour éviter des problèmes potentiels avec les intercepteurs
       const response = await apiClient.post('/auth/refresh-token', { refreshToken });
       const { token, refreshToken: newRefreshToken, expiresIn } = response.data;
-      setTokens(token, newRefreshToken, expiresIn);
+      
+      const success = setTokens(token, newRefreshToken, expiresIn);
+      if (!success) {
+        throw new Error('Échec du stockage des nouveaux tokens');
+      }
+      
       return response.data;
     } catch (error) {
       console.error('Erreur lors du rafraîchissement du token:', error);
@@ -144,15 +161,8 @@ const authService = {
    * @returns {boolean} True si l'utilisateur est authentifié
    */
   isAuthenticated() {
-    const token = localStorage.getItem(config.auth.tokenStorageKey);
-    const expiry = localStorage.getItem(config.auth.tokenExpiryKey);
-    
-    if (!token || !expiry) {
-      return false;
-    }
-    
-    // Vérifier si le token n'est pas expiré
-    return parseInt(expiry, 10) > Date.now();
+    const token = getToken();
+    return !!token;
   }
 };
 

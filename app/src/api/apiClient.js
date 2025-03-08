@@ -26,6 +26,7 @@ apiClient.interceptors.request.use(
 // Variables pour gérer le rafraîchissement du token
 let isRefreshing = false;
 let failedQueue = [];
+let refreshPromise = null;
 
 // Fonction pour traiter la file d'attente des requêtes échouées
 const processQueue = (error, token = null) => {
@@ -38,6 +39,59 @@ const processQueue = (error, token = null) => {
   });
   
   failedQueue = [];
+};
+
+// Fonction pour rafraîchir le token
+const refreshAuthToken = async () => {
+  // Si un rafraîchissement est déjà en cours, retourner la promesse existante
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+  
+  // Créer une nouvelle promesse pour le rafraîchissement
+  refreshPromise = new Promise(async (resolve, reject) => {
+    try {
+      const refreshToken = getRefreshToken();
+      
+      if (!refreshToken) {
+        throw new Error('Aucun token de rafraîchissement disponible');
+      }
+      
+      // Appeler l'API pour rafraîchir le token sans utiliser l'instance apiClient
+      // pour éviter les boucles d'intercepteurs
+      const response = await axios.post(`${config.apiBaseUrl}/auth/refresh-token`, {
+        refreshToken
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        withCredentials: true
+      });
+      
+      const { token, refreshToken: newRefreshToken, expiresIn } = response.data;
+      
+      if (token) {
+        // Stocker les nouveaux tokens
+        const success = setTokens(token, newRefreshToken, expiresIn);
+        
+        if (!success) {
+          throw new Error('Échec du stockage des tokens');
+        }
+        
+        // Résoudre la promesse avec le nouveau token
+        resolve(token);
+      } else {
+        throw new Error('Échec du rafraîchissement du token');
+      }
+    } catch (error) {
+      reject(error);
+    } finally {
+      // Réinitialiser la promesse de rafraîchissement
+      refreshPromise = null;
+    }
+  });
+  
+  return refreshPromise;
 };
 
 // Intercepteur de réponses pour gérer les erreurs et le rafraîchissement du token
@@ -53,8 +107,11 @@ apiClient.interceptors.response.use(
     
     // Si le token est expiré et que nous n'avons pas déjà essayé de rafraîchir
     if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      // Si le rafraîchissement est déjà en cours
       if (isRefreshing) {
-        // Si le rafraîchissement est déjà en cours, mettre la requête en file d'attente
+        // Mettre la requête en file d'attente
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
@@ -62,51 +119,36 @@ apiClient.interceptors.response.use(
             originalRequest.headers.Authorization = `${config.auth.tokenType} ${token}`;
             return apiClient(originalRequest);
           })
-          .catch(err => Promise.reject(err));
+          .catch(err => {
+            // Si la file d'attente échoue, effacer les tokens et retourner l'erreur
+            clearTokens();
+            return Promise.reject(err);
+          });
       }
       
-      originalRequest._retry = true;
       isRefreshing = true;
       
       try {
-        const refreshToken = getRefreshToken();
+        // Rafraîchir le token
+        const newToken = await refreshAuthToken();
         
-        if (!refreshToken) {
-          throw new Error('Aucun token de rafraîchissement disponible');
-        }
+        // Mettre à jour le header d'autorisation
+        apiClient.defaults.headers.common['Authorization'] = `${config.auth.tokenType} ${newToken}`;
+        originalRequest.headers.Authorization = `${config.auth.tokenType} ${newToken}`;
         
-        // Appeler l'API pour rafraîchir le token
-        const response = await axios.post(`${config.apiBaseUrl}/auth/refresh-token`, {
-          refreshToken
-        });
+        // Traiter la file d'attente avec le nouveau token
+        processQueue(null, newToken);
         
-        const { token, refreshToken: newRefreshToken, expiresIn } = response.data;
-        
-        if (token) {
-          // Stocker les nouveaux tokens
-          const success = setTokens(token, newRefreshToken, expiresIn);
-          
-          if (!success) {
-            throw new Error('Échec du stockage des tokens');
-          }
-          
-          // Mettre à jour le header d'autorisation
-          apiClient.defaults.headers.common['Authorization'] = `${config.auth.tokenType} ${token}`;
-          originalRequest.headers.Authorization = `${config.auth.tokenType} ${token}`;
-          
-          // Traiter la file d'attente avec le nouveau token
-          processQueue(null, token);
-          
-          // Réessayer la requête originale
-          return apiClient(originalRequest);
-        } else {
-          throw new Error('Échec du rafraîchissement du token');
-        }
+        // Réessayer la requête originale
+        return apiClient(originalRequest);
       } catch (refreshError) {
         // Gérer l'échec du rafraîchissement
+        console.error('Erreur de rafraîchissement du token:', refreshError);
+        
+        // Traiter la file d'attente avec l'erreur
         processQueue(refreshError, null);
         
-        // Nettoyer les tokens et rediriger vers la page de connexion
+        // Nettoyer les tokens
         clearTokens();
         
         // Ne pas rediriger automatiquement car cela peut provoquer des boucles
@@ -117,7 +159,12 @@ apiClient.interceptors.response.use(
       }
     }
     
-    // Gestion des autres erreurs...
+    // Formater les messages d'erreur pour l'utilisateur
+    if (error.response && error.response.data) {
+      const serverError = error.response.data.message || error.response.data.error || 'Une erreur est survenue';
+      return Promise.reject(new Error(serverError));
+    }
+    
     return Promise.reject(error);
   }
 );
