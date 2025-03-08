@@ -84,7 +84,11 @@ apiClient.interceptors.response.use(
         
         if (token) {
           // Stocker les nouveaux tokens
-          setTokens(token, newRefreshToken, expiresIn);
+          const success = setTokens(token, newRefreshToken, expiresIn);
+          
+          if (!success) {
+            throw new Error('Échec du stockage des tokens');
+          }
           
           // Mettre à jour le header d'autorisation
           apiClient.defaults.headers.common['Authorization'] = `${config.auth.tokenType} ${token}`;
@@ -104,32 +108,16 @@ apiClient.interceptors.response.use(
         
         // Nettoyer les tokens et rediriger vers la page de connexion
         clearTokens();
-        window.location.href = '/login';
         
+        // Ne pas rediriger automatiquement car cela peut provoquer des boucles
+        // Au lieu de cela, laissons le ProtectedRoute s'en occuper
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
     }
     
-    // Gestion spécifique des codes d'erreur
-    switch (error.response.status) {
-      case 400:
-        error.message = 'Requête incorrecte';
-        break;
-      case 403:
-        error.message = 'Accès refusé';
-        break;
-      case 404:
-        error.message = 'Ressource non trouvée';
-        break;
-      case 500:
-        error.message = 'Erreur serveur interne';
-        break;
-      default:
-        error.message = error.response.data?.message || 'Une erreur est survenue';
-    }
-    
+    // Gestion des autres erreurs...
     return Promise.reject(error);
   }
 );

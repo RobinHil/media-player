@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import authService from '../api/authService';
-import { isTokenValid, hasRole, getTokenInfo, shouldRefreshToken } from '../utils/auth';
+import { isTokenValid, hasRole, getTokenInfo, shouldRefreshToken, getRefreshToken } from '../utils/auth';
 import { useNavigate } from 'react-router-dom';
 
 // Créer le contexte
@@ -32,8 +32,19 @@ export const AuthProvider = ({ children }) => {
       if (isTokenValid()) {
         // Vérifier si le token doit être rafraîchi
         if (shouldRefreshToken()) {
-          // Rafraîchir le token en arrière-plan (géré par les intercepteurs)
-          // Pas besoin de code ici car c'est géré automatiquement par apiClient
+          try {
+            // Récupérer le refresh token
+            const refreshToken = getRefreshToken();
+            if (refreshToken) {
+              // Appeler l'API pour rafraîchir le token
+              const response = await authService.refreshToken(refreshToken);
+              // Si succès, les nouveaux tokens seront stockés par le service
+            }
+          } catch (refreshError) {
+            console.error('Erreur lors du rafraîchissement automatique du token:', refreshError);
+            // En cas d'échec du rafraîchissement, on continue avec le token actuel
+            // Il sera géré par l'intercepteur d'Axios si nécessaire
+          }
         }
         
         // Récupérer les infos utilisateur
