@@ -22,8 +22,10 @@ const authService = {
       
       const { token, refreshToken, expiresIn, user } = response.data;
       
-      // Stocker les tokens avec l'information si on doit se souvenir
-      setTokens(token, refreshToken, expiresIn, rememberMe);
+      // Stocker les tokens, toujours, indépendamment de rememberMe
+      // L'option rememberMe est transmise au serveur pour qu'il définisse une expiration plus longue
+      // mais côté client, on doit toujours stocker le token pour la session actuelle
+      setTokens(token, refreshToken, expiresIn);
       
       return user;
     } catch (error) {
@@ -133,22 +135,6 @@ const authService = {
     
     // Vérifier si le token n'est pas expiré
     return parseInt(expiry, 10) > Date.now();
-  },
-
-  async refreshToken(refreshToken) {
-    try {
-      const response = await apiClient.post('/auth/refresh-token', { refreshToken });
-      const { token, refreshToken: newRefreshToken, expiresIn } = response.data;
-      
-      // Maintenir le "rememberMe" si c'était activé
-      const useRememberMe = localStorage.getItem('useRememberMe') === 'true';
-      setTokens(token, newRefreshToken, expiresIn, useRememberMe);
-      
-      return response.data;
-    } catch (error) {
-      console.error('Erreur lors du rafraîchissement du token:', error);
-      throw error;
-    }
   }
 };
 

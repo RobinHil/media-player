@@ -44,38 +44,41 @@ const defaultOptions = {
 };
 
 /**
- * Limiteur de taux global pour toutes les routes
+ * Limiteur de taux global pour toutes les routes - Valeur très élevée
  */
 const globalLimiter = rateLimit({
-  ...defaultOptions
+  ...defaultOptions,
+  max: 5000, // 5000 requêtes par période - Valeur volontairement élevée
+  windowMs: 15 * 60 * 1000 // 15 minutes
 });
 
 /**
  * Limiteur de taux plus strict pour les routes sensibles comme l'authentification
+ * Mais toujours assez élevé pour ne pas gêner l'usage normal
  */
 export const authLimiter = rateLimit({
   ...defaultOptions,
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 tentatives maximum
+  max: 100, // 100 tentatives maximum - Augmenté de 10 à 100
   message: 'Trop de tentatives de connexion, veuillez réessayer plus tard'
 });
 
 /**
- * Limiteur de taux pour les requêtes d'API
+ * Limiteur de taux pour les requêtes d'API - Valeur augmentée
  */
 export const apiLimiter = rateLimit({
   ...defaultOptions,
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 100 // 100 requêtes maximum
+  max: 1000 // 1000 requêtes maximum - Augmenté de 100 à 1000
 });
 
 /**
- * Limiteur de taux pour le streaming de médias
+ * Limiteur de taux pour le streaming de médias - Valeur considérablement augmentée
  */
 export const mediaLimiter = rateLimit({
   ...defaultOptions,
   windowMs: 60 * 1000, // 1 minute
-  max: 50 // 50 requêtes maximum
+  max: 2000 // 2000 requêtes maximum - Augmenté de 50 à 2000
 });
 
 /**

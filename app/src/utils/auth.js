@@ -7,7 +7,7 @@ import config from '../config';
  * @param {string} refreshToken - Token de rafraîchissement
  * @param {number} expiresIn - Durée de validité en secondes
  */
-export const setTokens = (token, refreshToken, expiresIn, rememberMe = false) => {
+export const setTokens = (token, refreshToken, expiresIn) => {
   if (!token || !refreshToken) {
     return false;
   }
@@ -16,19 +16,10 @@ export const setTokens = (token, refreshToken, expiresIn, rememberMe = false) =>
     // Calculer la date d'expiration
     const expiryDate = new Date(Date.now() + expiresIn * 1000);
     
-    // Utiliser localStorage ou sessionStorage en fonction de rememberMe
-    const storage = rememberMe ? localStorage : sessionStorage;
-    
     // Stocker les tokens
-    storage.setItem(config.auth.tokenStorageKey, token);
-    storage.setItem(config.auth.refreshTokenStorageKey, refreshToken);
-    storage.setItem(config.auth.tokenExpiryKey, expiryDate.getTime().toString());
-    
-    // Si on utilise "se souvenir de moi", stocker également dans localStorage
-    // pour pouvoir récupérer la session lors de la prochaine visite
-    if (rememberMe) {
-      localStorage.setItem('useRememberMe', 'true');
-    }
+    localStorage.setItem(config.auth.tokenStorageKey, token);
+    localStorage.setItem(config.auth.refreshTokenStorageKey, refreshToken);
+    localStorage.setItem(config.auth.tokenExpiryKey, expiryDate.getTime().toString());
     
     return true;
   } catch (error) {
@@ -96,19 +87,8 @@ export const isTokenValid = () => {
     }
     
     const expiryDate = parseInt(expiryTime, 10);
-    if (isNaN(expiryDate)) {
+    if (isNaN(expiryDate) || expiryDate <= Date.now()) {
       return false;
-    }
-    
-    // Si le token est proche de l'expiration mais qu'il existe un refreshToken
-    // on considère qu'il est toujours valide car il sera rafraîchi automatiquement
-    if (expiryDate <= Date.now()) {
-      const refreshToken = getRefreshToken();
-      // Si pas de refresh token, token invalide
-      if (!refreshToken) {
-        return false;
-      }
-      // Sinon on laisse le mécanisme de refresh token s'occuper de ça
     }
     
     // Vérifier la validité du token (format JWT)

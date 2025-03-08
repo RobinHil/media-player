@@ -70,11 +70,12 @@ const streamingConfig = {
 const securityConfig = {
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // 15 minutes par défaut
-    max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10) // 100 requêtes par fenêtre par défaut
-  },
-  passwordMinLength: parseInt(process.env.PASSWORD_MIN_LENGTH || '8', 10),
-  maxUploadSize: process.env.MAX_UPLOAD_SIZE || '500mb',
-  csrfProtection: process.env.CSRF_PROTECTION !== 'false',
+    max: parseInt(process.env.RATE_LIMIT_MAX || '1000', 10), // 1000 requêtes par fenêtre par défaut
+    standardLimitByIp: parseInt(process.env.RATE_LIMIT_STANDARD || '3000', 10), // Limite standard par IP
+    authLimitByIp: parseInt(process.env.RATE_LIMIT_AUTH || '100', 10), // Limite pour l'authentification
+    apiLimitByIp: parseInt(process.env.RATE_LIMIT_API || '1500', 10), // Limite pour l'API
+    mediaLimitByIp: parseInt(process.env.RATE_LIMIT_MEDIA || '2000', 10), // Limite pour les médias
+  }
 };
 
 // Configuration des logs
