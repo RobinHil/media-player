@@ -1,4 +1,4 @@
-import apiClient from './apiClient';
+import apiClient from '../api/apiClient';
 
 /**
  * Service de gestion des utilisateurs
@@ -95,6 +95,35 @@ const userService = {
     }
   },
   
+  /**
+   * Récupère les préférences de l'utilisateur
+   * @returns {Promise} Promesse résolue avec les préférences
+   */
+  async getPreferences() {
+    try {
+      const response = await apiClient.get('/users/preferences');
+      return response.data;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des préférences:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Met à jour les préférences de l'utilisateur
+   * @param {Object} preferences - Préférences à mettre à jour
+   * @returns {Promise} Promesse résolue avec les préférences mises à jour
+   */
+  async updatePreferences(preferences) {
+    try {
+      const response = await apiClient.put('/users/preferences', preferences);
+      return response.data.preferences;
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des préférences:', error);
+      throw error;
+    }
+  },
+  
   // Fonctions d'administration (pour les utilisateurs admin uniquement)
   
   /**
@@ -145,11 +174,12 @@ const userService = {
   /**
    * Supprime un utilisateur (admin uniquement)
    * @param {string} userId - ID de l'utilisateur
+   * @param {boolean} deleteData - Supprimer également les données de l'utilisateur
    * @returns {Promise} Promesse résolue après la suppression
    */
-  async deleteUser(userId) {
+  async deleteUser(userId, deleteData = false) {
     try {
-      const response = await apiClient.delete(`/users/${userId}`);
+      const response = await apiClient.delete(`/users/${userId}?deleteData=${deleteData}`);
       return response.data;
     } catch (error) {
       console.error('Erreur lors de la suppression de l\'utilisateur:', error);
