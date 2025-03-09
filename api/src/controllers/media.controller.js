@@ -1,61 +1,26 @@
 // server/controllers/media.controller.js
-import { promises as fs } from 'fs';
-import { createReadStream, existsSync } from 'fs';
+import { promises as fs, createReadStream, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mime from 'mime-types';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
-import { validatePath } from '../utils/security.js';
-import { getFileType } from '../utils/fileTypes.js';
+import { validatePath, checkUserAccess } from '../utils/security.js';
+import { getFileType, getFileMetadata } from '../utils/fileTypes.js';
 import transcodeService from '../services/transcode.service.js';
 import thumbnailService from '../services/thumbnail.service.js';
 import cacheService from '../services/cache.service.js';
-import { checkUserAccess } from '../utils/security.js';
+import ViewHistory from '../models/viewHistory.model.js';
 
 // Obtenir le chemin absolu
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * @swagger
- * /media/stream/{path}:
- *   get:
- *     summary: Streamer un fichier média
- *     tags: [Media]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: path
- *         required: true
- *         schema:
- *           type: string
- *         description: Chemin relatif du fichier
- *       - in: query
- *         name: quality
- *         schema:
- *           type: string
- *           enum: [auto, 240p, 360p, 480p, 720p, 1080p]
- *         description: Qualité de la vidéo (pour les vidéos uniquement)
- *       - in: query
- *         name: format
- *         schema:
- *           type: string
- *           enum: [auto, mp4, webm, hls]
- *         description: Format de sortie (pour les vidéos uniquement)
- *     responses:
- *       200:
- *         description: Fichier streamé
- *         content:
- *           video/*: {}
- *           image/*: {}
- *           audio/*: {}
- *       403:
- *         description: Accès refusé
- *       404:
- *         description: Fichier non trouvé
+ * Streamer un fichier média
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const streamMedia = async (req, res, next) => {
   try {
@@ -97,6 +62,9 @@ export const streamMedia = async (req, res, next) => {
     const fileExtension = path.extname(fullPath).toLowerCase();
     const fileType = getFileType(fileExtension);
     
+    // Enregistrer la vue dans l'historique
+    await updateViewHistory(req.user._id, mediaPath);
+    
     // En fonction du type de fichier, utiliser la méthode de streaming appropriée
     switch (fileType) {
       case 'video':
@@ -121,50 +89,10 @@ export const streamMedia = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /media/thumbnail/{path}:
- *   get:
- *     summary: Obtenir la miniature d'un fichier média
- *     tags: [Media]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: path
- *         required: true
- *         schema:
- *           type: string
- *         description: Chemin relatif du fichier
- *       - in: query
- *         name: width
- *         schema:
- *           type: integer
- *         description: Largeur souhaitée
- *       - in: query
- *         name: height
- *         schema:
- *           type: integer
- *         description: Hauteur souhaitée
- *       - in: query
- *         name: time
- *         schema:
- *           type: integer
- *         description: Position temporelle pour les vidéos (en secondes)
- *       - in: query
- *         name: refresh
- *         schema:
- *           type: boolean
- *         description: Forcer la régénération de la miniature
- *     responses:
- *       200:
- *         description: Miniature
- *         content:
- *           image/jpeg: {}
- *       403:
- *         description: Accès refusé
- *       404:
- *         description: Fichier non trouvé
+ * Obtenir la miniature d'un fichier média
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const getThumbnail = async (req, res, next) => {
   try {
@@ -223,37 +151,10 @@ export const getThumbnail = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /media/info/{path}:
- *   get:
- *     summary: Obtenir les informations détaillées sur un fichier média
- *     tags: [Media]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: path
- *         required: true
- *         schema:
- *           type: string
- *         description: Chemin relatif du fichier
- *     responses:
- *       200:
- *         description: Informations sur le fichier
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 metadata:
- *                   type: object
- *       403:
- *         description: Accès refusé
- *       404:
- *         description: Fichier non trouvé
+ * Obtenir les informations détaillées sur un fichier média
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const getMediaInfo = async (req, res, next) => {
   try {
@@ -309,55 +210,10 @@ export const getMediaInfo = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /media/formats/{path}:
- *   get:
- *     summary: Obtenir les formats disponibles pour un fichier vidéo
- *     tags: [Media]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: path
- *         required: true
- *         schema:
- *           type: string
- *         description: Chemin relatif du fichier vidéo
- *     responses:
- *       200:
- *         description: Formats disponibles
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 formats:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       format:
- *                         type: string
- *                       qualities:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             quality:
- *                               type: string
- *                             width:
- *                               type: integer
- *                             height:
- *                               type: integer
- *                             bitrate:
- *                               type: integer
- *       403:
- *         description: Accès refusé
- *       404:
- *         description: Fichier non trouvé
+ * Obtenir les formats disponibles pour un fichier vidéo
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const getAvailableFormats = async (req, res, next) => {
   try {
@@ -418,28 +274,10 @@ export const getAvailableFormats = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /media/subtitles/{path}:
- *   get:
- *     summary: Obtenir les sous-titres disponibles pour un fichier vidéo
- *     tags: [Media]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: path
- *         required: true
- *         schema:
- *           type: string
- *         description: Chemin relatif du fichier vidéo
- *     responses:
- *       200:
- *         description: Sous-titres disponibles
- *       403:
- *         description: Accès refusé
- *       404:
- *         description: Fichier non trouvé
+ * Obtenir les sous-titres disponibles pour un fichier vidéo
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const getSubtitles = async (req, res, next) => {
   try {
@@ -489,34 +327,10 @@ export const getSubtitles = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /media/subtitle/{path}/{lang}:
- *   get:
- *     summary: Obtenir un fichier de sous-titres spécifique
- *     tags: [Media]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: path
- *         required: true
- *         schema:
- *           type: string
- *         description: Chemin relatif du fichier vidéo
- *       - in: path
- *         name: lang
- *         required: true
- *         schema:
- *           type: string
- *         description: Code de langue (fr, en, etc.)
- *     responses:
- *       200:
- *         description: Fichier de sous-titres
- *       403:
- *         description: Accès refusé
- *       404:
- *         description: Fichier non trouvé
+ * Obtenir un fichier de sous-titres spécifique
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const getSubtitleFile = async (req, res, next) => {
   try {
@@ -578,6 +392,49 @@ export const getSubtitleFile = async (req, res, next) => {
 };
 
 /**
+ * Récupérer un segment HLS
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
+ */
+export const getHlsSegment = async (req, res, next) => {
+  try {
+    const { id, file } = req.params;
+    
+    // Construire le chemin complet du fichier
+    const hlsDir = path.join(config.media.transcodedDir, 'hls', id);
+    const filePath = path.join(hlsDir, file);
+    
+    // Vérifier si le fichier existe
+    try {
+      await fs.access(filePath);
+    } catch (error) {
+      return res.status(404).json({
+        success: false,
+        message: 'Fichier HLS non trouvé'
+      });
+    }
+    
+    // Déterminer le type MIME
+    let contentType = 'application/vnd.apple.mpegurl';
+    if (file.endsWith('.ts')) {
+      contentType = 'video/mp2t';
+    }
+    
+    // Configurer les en-têtes appropriés
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 heure
+    
+    // Streamer le fichier
+    const fileStream = createReadStream(filePath);
+    fileStream.pipe(res);
+  } catch (error) {
+    logger.error('Erreur lors de la récupération du segment HLS:', error);
+    next(error);
+  }
+};
+
+/**
  * Fonction pour streamer une vidéo
  * @param {Object} req - Requête Express
  * @param {Object} res - Réponse Express
@@ -586,7 +443,7 @@ export const getSubtitleFile = async (req, res, next) => {
  * @param {string} quality - Qualité demandée
  * @param {string} format - Format demandé
  */
-const streamVideo = async (req, res, filePath, relativePath, quality, format) => {
+export const streamVideo = async (req, res, filePath, relativePath, quality, format) => {
   try {
     // Déterminer le format de sortie en fonction de l'extension et du paramètre
     const fileExtension = path.extname(filePath).toLowerCase();
@@ -625,7 +482,7 @@ const streamVideo = async (req, res, filePath, relativePath, quality, format) =>
  * @param {Object} res - Réponse Express
  * @param {string} filePath - Chemin complet du fichier
  */
-const streamAudio = async (req, res, filePath) => {
+export const streamAudio = async (req, res, filePath) => {
   try {
     // Déterminer le type MIME
     const mimeType = mime.lookup(filePath) || 'audio/mpeg';
@@ -647,7 +504,7 @@ const streamAudio = async (req, res, filePath) => {
  * @param {Object} res - Réponse Express
  * @param {string} filePath - Chemin complet du fichier
  */
-const serveImage = async (req, res, filePath) => {
+export const serveImage = async (req, res, filePath) => {
   try {
     // Paramètres optionnels pour le redimensionnement
     const width = parseInt(req.query.width, 10) || null;
@@ -684,7 +541,7 @@ const serveImage = async (req, res, filePath) => {
  * @param {string} filePath - Chemin complet du fichier
  * @param {string} contentType - Type MIME du contenu
  */
-const streamRaw = async (req, res, filePath, contentType = null) => {
+export const streamRaw = async (req, res, filePath, contentType = null) => {
   try {
     // Obtenir les statistiques du fichier
     const stat = await fs.stat(filePath);
@@ -754,7 +611,7 @@ const streamRaw = async (req, res, filePath, contentType = null) => {
  * @param {string} relativePath - Chemin relatif du fichier
  * @param {string} quality - Qualité demandée
  */
-const streamHLS = async (req, res, filePath, relativePath, quality) => {
+export const streamHLS = async (req, res, filePath, relativePath, quality) => {
   try {
     const result = await transcodeService.prepareHLS(filePath, relativePath, quality);
     
@@ -824,6 +681,38 @@ const findSubtitles = async (videoPath) => {
 };
 
 /**
+ * Mettre à jour l'historique de visualisation d'un utilisateur
+ * @param {string} userId - ID de l'utilisateur
+ * @param {string} mediaPath - Chemin du fichier consulté
+ */
+const updateViewHistory = async (userId, mediaPath) => {
+  try {
+    // Chercher une entrée existante
+    let history = await ViewHistory.findOne({
+      user: userId,
+      path: mediaPath
+    });
+    
+    if (history) {
+      // Mettre à jour l'entrée existante
+      history.lastViewed = new Date();
+      history.viewCount += 1;
+    } else {
+      // Créer une nouvelle entrée
+      history = new ViewHistory({
+        user: userId,
+        path: mediaPath
+      });
+    }
+    
+    await history.save();
+  } catch (error) {
+    logger.error(`Erreur lors de la mise à jour de l'historique de visualisation: ${error.message}`);
+    // Une erreur ici ne doit pas interrompre la diffusion du média
+  }
+};
+
+/**
  * Fonction pour obtenir le nom complet d'une langue à partir de son code
  * @param {string} langCode - Code de langue (fr, en, etc.)
  * @returns {string} Nom complet de la langue
@@ -851,5 +740,11 @@ export default {
   getMediaInfo,
   getAvailableFormats,
   getSubtitles,
-  getSubtitleFile
+  getSubtitleFile,
+  getHlsSegment,
+  streamVideo,
+  streamAudio,
+  serveImage,
+  streamRaw,
+  streamHLS
 };

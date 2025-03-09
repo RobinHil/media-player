@@ -15,7 +15,7 @@ import { setupSwagger } from './docs/swagger-autogen.js';
 import { setupPassport } from './config/passport.js';
 import { connectDatabase } from './config/database.js';
 import logger from './utils/logger.js';
-import errorMiddleware from './middleware/error.middleware.js';
+import errorMiddleware, { notFoundMiddleware } from './middleware/error.middleware.js';
 import rateLimiter from './middleware/rateLimiter.middleware.js';
 
 // Import des routes
@@ -23,6 +23,8 @@ import authRoutes from './routes/auth.routes.js';
 import filesRoutes from './routes/files.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import userRoutes from './routes/user.routes.js';
+import adminRoutes from './routes/admin.routes.js';
+import sharedRoutes from './routes/shared.routes.js';
 
 // Initialisation de l'application Express
 const app = express();
@@ -57,7 +59,28 @@ if (config.server.env === 'production') {
 
 // Configuration de Swagger
 const swaggerSpec = setupSwagger();
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Rendre les modèles disponibles à l'application
+import User from './models/user.model.js';
+import Session from './models/session.model.js';
+import MediaAccess from './models/mediaAccess.model.js';
+import Folder from './models/folder.model.js';
+import ViewHistory from './models/viewHistory.model.js';
+import ActivityLog from './models/activityLog.model.js';
+import Setting from './models/setting.model.js';
+import Favorite from './models/favorite.model.js';
+
+app.set('models', {
+  User,
+  Session,
+  MediaAccess,
+  Folder,
+  ViewHistory,
+  ActivityLog,
+  Setting,
+  Favorite
+});
 
 // Montage des routes API
 const apiRouter = express.Router();
@@ -65,6 +88,8 @@ apiRouter.use('/auth', authRoutes);
 apiRouter.use('/files', filesRoutes);
 apiRouter.use('/media', mediaRoutes);
 apiRouter.use('/users', userRoutes);
+apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/shared', sharedRoutes);
 
 // Préfixage de toutes les routes API
 app.use(config.server.apiPrefix, apiRouter);
@@ -76,6 +101,21 @@ if (config.server.env === 'production') {
   });
 }
 
+const welcomeMessage = 'Bienvenue sur notre API ! Pour consulter la documentation, veuillez visiter <a href="/api/docs">/api/docs</a>';
+
+// Affichage d'un message de bienvenue sur la route racine
+app.get('/', (req, res) => {
+  res.send(welcomeMessage);
+});
+
+// Affichage d'un message de bienvenue sur la route API racine
+app.get('/api/', (req, res) => {
+  res.send(welcomeMessage);
+});
+
+// Middleware pour les routes non trouvées
+app.use(notFoundMiddleware);
+
 // Middleware de gestion des erreurs
 app.use(errorMiddleware);
 
@@ -83,7 +123,7 @@ app.use(errorMiddleware);
 const PORT = config.server.port;
 app.listen(PORT, () => {
   logger.info(`Serveur démarré en mode ${config.server.env} sur http://localhost:${PORT}`);
-  logger.info(`Documentation API disponible sur http://localhost:${PORT}/api-docs`);
+  logger.info(`Documentation API disponible sur http://localhost:${PORT}/api/docs`);
 });
 
 // Gestion des erreurs non traitées

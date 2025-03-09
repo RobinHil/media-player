@@ -6,50 +6,13 @@ import config from '../config/config.js';
 import User from '../models/user.model.js';
 import Session from '../models/session.model.js';
 import logger from '../utils/logger.js';
+import { createHttpError } from '../middleware/error.middleware.js';
 
 /**
- * @swagger
- * /auth/register:
- *   post:
- *     summary: Inscription d'un nouvel utilisateur
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *               - name
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               password:
- *                 type: string
- *                 minLength: 8
- *               name:
- *                 type: string
- *     responses:
- *       201:
- *         description: Inscription réussie
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 user:
- *                   $ref: '#/components/schemas/User'
- *       400:
- *         description: Données invalides
- *       409:
- *         description: Email déjà utilisé
+ * Inscription d'un nouvel utilisateur
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const register = async (req, res, next) => {
   try {
@@ -64,22 +27,48 @@ export const register = async (req, res, next) => {
       });
     }
     
+    // Vérifier si l'inscription est activée
+    const settings = await getSystemSettings();
+    if (settings.registration && settings.registration.enabled === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'L\'inscription de nouveaux utilisateurs est désactivée'
+      });
+    }
+    
     // Créer un nouvel utilisateur
     const user = new User({
       email,
       password,
-      name
+      name,
+      active: settings.registration && settings.registration.requireApproval ? false : true
     });
     
     // Sauvegarder l'utilisateur
     await user.save();
+    
+    // Journaliser l'action
+    logger.info(`Nouvel utilisateur inscrit: ${email}`);
+    
+    // Ajouter une entrée au journal d'activité
+    await createActivityLog({
+      action: 'register',
+      userId: user._id,
+      details: {
+        name: user.name,
+        email: user.email
+      },
+      ip: req.ip
+    });
     
     // Retourner l'utilisateur créé (sans le mot de passe)
     const userObject = user.toSafeObject();
     
     res.status(201).json({
       success: true,
-      message: 'Inscription réussie',
+      message: settings.registration && settings.registration.requireApproval ? 
+        'Inscription réussie. Votre compte doit être approuvé par un administrateur.' : 
+        'Inscription réussie',
       user: userObject
     });
   } catch (error) {
@@ -89,37 +78,10 @@ export const register = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /auth/login:
- *   post:
- *     summary: Connexion d'un utilisateur
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               password:
- *                 type: string
- *               rememberMe:
- *                 type: boolean
- *     responses:
- *       200:
- *         description: Connexion réussie
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/TokenResponse'
- *       401:
- *         description: Échec de l'authentification
+ * Connexion d'un utilisateur
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const login = async (req, res, next) => {
   try {
@@ -158,7 +120,21 @@ export const login = async (req, res, next) => {
     await user.save();
     
     // Générer les tokens
-    const { accessToken, refreshToken, expiresIn } = await generateTokens(user, req);
+    const { accessToken, refreshToken, expiresIn } = await generateTokens(user, req, rememberMe);
+    
+    // Journaliser la connexion
+    logger.info(`Utilisateur connecté: ${email}`);
+    
+    // Ajouter une entrée au journal d'activité
+    await createActivityLog({
+      action: 'login',
+      userId: user._id,
+      details: {
+        userAgent: req.headers['user-agent'],
+        ip: req.ip
+      },
+      ip: req.ip
+    });
     
     // Préparer la réponse avec les tokens
     const response = {
@@ -188,19 +164,10 @@ export const login = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /auth/logout:
- *   post:
- *     summary: Déconnexion de l'utilisateur
- *     tags: [Auth]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     responses:
- *       200:
- *         description: Déconnexion réussie
- *       401:
- *         description: Non authentifié
+ * Déconnexion d'un utilisateur
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const logout = async (req, res, next) => {
   try {
@@ -214,6 +181,16 @@ export const logout = async (req, res, next) => {
         { active: false },
         { new: true }
       );
+      
+      // Ajouter une entrée au journal d'activité
+      await createActivityLog({
+        action: 'logout',
+        userId: req.user._id,
+        details: {
+          sessionId: refreshToken
+        },
+        ip: req.ip
+      });
     }
     
     // Nettoyer le cookie
@@ -230,31 +207,10 @@ export const logout = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /auth/refresh-token:
- *   post:
- *     summary: Rafraîchir le token d'accès
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - refreshToken
- *             properties:
- *               refreshToken:
- *                 type: string
- *     responses:
- *       200:
- *         description: Token rafraîchi avec succès
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/TokenResponse'
- *       401:
- *         description: Token de rafraîchissement invalide ou expiré
+ * Rafraîchir le token d'accès
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const refreshToken = async (req, res, next) => {
   try {
@@ -317,6 +273,16 @@ export const refreshToken = async (req, res, next) => {
     
     res.cookie('access_token', accessToken, cookieOptions);
     
+    // Ajouter une entrée au journal d'activité
+    await createActivityLog({
+      action: 'refresh_token',
+      userId: session.user._id,
+      details: {
+        sessionId: session._id
+      },
+      ip: req.ip
+    });
+    
     // Envoyer la réponse
     res.status(200).json({
       success: true,
@@ -332,28 +298,10 @@ export const refreshToken = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /auth/me:
- *   get:
- *     summary: Récupérer les informations de l'utilisateur connecté
- *     tags: [Auth]
- *     security:
- *       - bearerAuth: []
- *       - cookieAuth: []
- *     responses:
- *       200:
- *         description: Informations de l'utilisateur
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 user:
- *                   $ref: '#/components/schemas/User'
- *       401:
- *         description: Non authentifié
+ * Récupérer les informations de l'utilisateur connecté
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const getMe = async (req, res, next) => {
   try {
@@ -372,28 +320,10 @@ export const getMe = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /auth/forgot-password:
- *   post:
- *     summary: Demander la réinitialisation du mot de passe
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *     responses:
- *       200:
- *         description: Email de réinitialisation envoyé
- *       404:
- *         description: Utilisateur non trouvé
+ * Demander la réinitialisation du mot de passe
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const forgotPassword = async (req, res, next) => {
   try {
@@ -431,6 +361,16 @@ export const forgotPassword = async (req, res, next) => {
       logger.info(`URL de réinitialisation: ${resetUrl}`);
     }
     
+    // Ajouter une entrée au journal d'activité
+    await createActivityLog({
+      action: 'forgot_password',
+      userId: user._id,
+      details: {
+        ip: req.ip
+      },
+      ip: req.ip
+    });
+    
     // TODO: Implémenter l'envoi d'email
     
     res.status(200).json({
@@ -444,31 +384,10 @@ export const forgotPassword = async (req, res, next) => {
 };
 
 /**
- * @swagger
- * /auth/reset-password:
- *   post:
- *     summary: Réinitialiser le mot de passe
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - token
- *               - password
- *             properties:
- *               token:
- *                 type: string
- *               password:
- *                 type: string
- *                 minLength: 8
- *     responses:
- *       200:
- *         description: Mot de passe réinitialisé avec succès
- *       400:
- *         description: Token invalide ou expiré
+ * Réinitialiser le mot de passe
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
  */
 export const resetPassword = async (req, res, next) => {
   try {
@@ -502,6 +421,16 @@ export const resetPassword = async (req, res, next) => {
       { active: false }
     );
     
+    // Ajouter une entrée au journal d'activité
+    await createActivityLog({
+      action: 'reset_password',
+      userId: user._id,
+      details: {
+        ip: req.ip
+      },
+      ip: req.ip
+    });
+    
     res.status(200).json({
       success: true,
       message: 'Mot de passe réinitialisé avec succès'
@@ -513,12 +442,37 @@ export const resetPassword = async (req, res, next) => {
 };
 
 /**
+ * Callback après authentification Google
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction suivante
+ */
+export const googleCallback = async (req, res, next) => {
+  try {
+    // Générer les tokens JWT
+    const user = req.user;
+    
+    // Générer le token d'accès et le token de rafraîchissement
+    const { accessToken, refreshToken } = await generateTokens(user, req);
+    
+    // Rediriger vers l'application frontend avec les tokens
+    res.redirect(`${config.server.corsOrigin}/auth/callback?token=${accessToken}&refreshToken=${refreshToken}`);
+  } catch (error) {
+    logger.error('Erreur lors du callback Google:', error);
+    
+    // Rediriger vers la page d'erreur
+    res.redirect(`${config.server.corsOrigin}/auth/error`);
+  }
+};
+
+/**
  * Générer des tokens d'accès et de rafraîchissement
  * @param {Object} user - L'utilisateur
  * @param {Object} req - Objet requête Express
+ * @param {Boolean} rememberMe - Conserver la session plus longtemps
  * @returns {Object} Tokens générés
  */
-const generateTokens = async (user, req) => {
+const generateTokens = async (user, req, rememberMe = false) => {
   // Préparer le payload pour le JWT
   const payload = {
     sub: user._id,
@@ -526,9 +480,17 @@ const generateTokens = async (user, req) => {
     role: user.role
   };
   
+  // Récupérer les paramètres de sécurité
+  const settings = await getSystemSettings();
+  const sessionTimeout = settings.security && settings.security.sessionTimeout ? 
+    settings.security.sessionTimeout : 3600; // 1 heure par défaut
+  
+  // Durée de validité du token d'accès
+  const tokenExpiresIn = `${sessionTimeout}s`;
+  
   // Générer le token d'accès
   const accessToken = jwt.sign(payload, config.auth.jwtSecret, {
-    expiresIn: config.auth.jwtExpiresIn
+    expiresIn: tokenExpiresIn
   });
   
   // Générer un token de rafraîchissement
@@ -540,7 +502,7 @@ const generateTokens = async (user, req) => {
   
   // Calculer la date d'expiration
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 30); // 30 jours
+  expiresAt.setDate(expiresAt.getDate() + (rememberMe ? 30 : 7)); // 30 jours ou 7 jours
   
   // Créer une nouvelle session
   const session = new Session({
@@ -557,13 +519,87 @@ const generateTokens = async (user, req) => {
   await session.save();
   
   // Calculer l'expiration en secondes
-  const expiresIn = parseInt(config.auth.jwtExpiresIn.replace('s', ''), 10) ||
-                   parseInt(config.auth.jwtExpiresIn.replace('m', '') * 60, 10) ||
-                   parseInt(config.auth.jwtExpiresIn.replace('h', '') * 3600, 10) ||
-                   parseInt(config.auth.jwtExpiresIn.replace('d', '') * 86400, 10) ||
-                   3600; // 1 heure par défaut
+  const expiresIn = sessionTimeout;
   
   return { accessToken, refreshToken, expiresIn };
+};
+
+/**
+ * Récupérer les paramètres système
+ * @returns {Object} Paramètres système
+ */
+const getSystemSettings = async () => {
+  try {
+    // Importer le modèle des paramètres
+    const Setting = await import('../models/setting.model.js').then(m => m.default);
+    
+    // Récupérer les paramètres
+    const settings = await Setting.findOne({});
+    
+    if (!settings) {
+      // Créer les paramètres par défaut
+      const defaultSettings = new Setting({
+        registration: {
+          enabled: true,
+          requireApproval: false
+        },
+        storage: {
+          defaultLimit: 5 * 1024 * 1024 * 1024 // 5GB par défaut
+        },
+        security: {
+          maxLoginAttempts: 5,
+          lockoutTime: 300, // 5 minutes
+          sessionTimeout: 3600 // 1 heure
+        }
+      });
+      
+      await defaultSettings.save();
+      return defaultSettings;
+    }
+    
+    return settings;
+  } catch (error) {
+    logger.error('Erreur lors de la récupération des paramètres système:', error);
+    
+    // Retourner des paramètres par défaut en cas d'erreur
+    return {
+      registration: {
+        enabled: true,
+        requireApproval: false
+      },
+      storage: {
+        defaultLimit: 5 * 1024 * 1024 * 1024 // 5GB par défaut
+      },
+      security: {
+        maxLoginAttempts: 5,
+        lockoutTime: 300, // 5 minutes
+        sessionTimeout: 3600 // 1 heure
+      }
+    };
+  }
+};
+
+/**
+ * Créer une entrée dans le journal d'activité
+ * @param {Object} data - Données de l'activité
+ * @returns {Promise} Promise résolue avec l'entrée créée
+ */
+const createActivityLog = async (data) => {
+  try {
+    // Importer le modèle du journal d'activité
+    const ActivityLog = await import('../models/activityLog.model.js').then(m => m.default);
+    
+    // Créer une nouvelle entrée
+    const log = new ActivityLog(data);
+    
+    // Sauvegarder l'entrée
+    await log.save();
+    
+    return log;
+  } catch (error) {
+    logger.error('Erreur lors de la création d\'une entrée dans le journal d\'activité:', error);
+    return null;
+  }
 };
 
 // Fonctions utilitaires pour extraire les informations du user-agent
@@ -609,5 +645,6 @@ export default {
   refreshToken,
   getMe,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  googleCallback
 };

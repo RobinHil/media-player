@@ -98,11 +98,7 @@ const mediaAccessSchema = new mongoose.Schema(
     },
     
     // Clé de partage pour les liens partagés
-    shareKey: {
-      type: String,
-      unique: true,
-      sparse: true, // Permet des valeurs null/undefined
-    },
+    shareKey: String,
     
     // Configuration des limites pour le partage
     shareConfig: {
@@ -136,16 +132,17 @@ mediaAccessSchema.pre('validate', function (next) {
   if (this.user && this.role) {
     return next(new Error('Une autorisation ne peut pas concerner à la fois un utilisateur et un rôle'));
   }
-  if (!this.user && !this.role) {
-    return next(new Error('Une autorisation doit concerner soit un utilisateur, soit un rôle'));
+  if (!this.user && !this.role && !this.shareKey) {
+    return next(new Error('Une autorisation doit concerner soit un utilisateur, soit un rôle, soit avoir une clé de partage'));
   }
   next();
 });
 
-// Indexation pour optimiser les requêtes courantes
-mediaAccessSchema.index({ path: 1, user: 1 }, { unique: true, sparse: true });
-mediaAccessSchema.index({ path: 1, role: 1 }, { unique: true, sparse: true });
-mediaAccessSchema.index({ shareKey: 1 }, { unique: true, sparse: true });
+// Supprimer tous les index précédents et créer uniquement ceux dont nous avons besoin
+// Cette approche évite les problèmes de duplication d'index
+mediaAccessSchema.index({ path: 1, user: 1 }, { sparse: true });
+mediaAccessSchema.index({ path: 1, role: 1 }, { sparse: true });
+mediaAccessSchema.index({ shareKey: 1 }, { sparse: true });
 mediaAccessSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const MediaAccess = mongoose.model('MediaAccess', mediaAccessSchema);

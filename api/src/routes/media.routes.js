@@ -3,6 +3,7 @@ import express from 'express';
 import { param, query } from 'express-validator';
 import mediaController from '../controllers/media.controller.js';
 import authMiddleware from '../middleware/auth.middleware.js';
+import { optionalAuthMiddleware, shareAuthMiddleware } from '../middleware/auth.middleware.js';
 import validatorMiddleware from '../middleware/validator.middleware.js';
 import cacheMiddleware from '../middleware/cache.middleware.js';
 
@@ -31,7 +32,7 @@ router.use(authMiddleware);
  *         name: quality
  *         schema:
  *           type: string
- *           enum: [auto, 240p, 360p, 480p, 720p, 1080p]
+ *           enum: [auto, 240p, 360p, 480p, 720p, 1080p, original]
  *         description: Qualité de la vidéo (pour les vidéos uniquement)
  *       - in: query
  *         name: format
@@ -312,11 +313,6 @@ router.get('/hls/:id/:file', [
     .withMessage('Le nom du fichier est requis'),
   validatorMiddleware,
   cacheMiddleware(3600) // Cache d'une heure
-], (req, res, next) => {
-  // Implémenter l'accès aux segments HLS
-  // Cette route sera gérée par une fonction spécifique dans le contrôleur média
-  // pour servir les fichiers .m3u8 et .ts
-  res.send('HLS segments');
-});
+], mediaController.getHlsSegment);
 
 export default router;

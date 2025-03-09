@@ -1,0 +1,1051 @@
+/**
+ * Routes API complètes pour l'application MediaVault
+ * 
+ * Ce document liste toutes les routes API nécessaires pour le bon fonctionnement
+ * de l'application, regroupées par catégorie.
+ */
+
+// ==========================================
+// ROUTES D'AUTHENTIFICATION
+// ==========================================
+
+/**
+ * POST /api/auth/login
+ * Authentifie un utilisateur
+ * 
+ * Body:
+ * {
+ *   "email": "utilisateur@exemple.com",
+ *   "password": "motdepasse",
+ *   "rememberMe": true // optionnel
+ * }
+ * 
+ * Response:
+ * {
+ *   "token": "jwt_token",
+ *   "refreshToken": "refresh_token",
+ *   "expiresIn": 3600, // secondes
+ *   "user": {
+ *     "id": "user_id",
+ *     "name": "Nom Utilisateur",
+ *     "email": "utilisateur@exemple.com",
+ *     "role": "user" // ou "admin"
+ *   }
+ * }
+ */
+
+/**
+ * POST /api/auth/register
+ * Inscrit un nouvel utilisateur
+ * 
+ * Body:
+ * {
+ *   "name": "Nom Utilisateur",
+ *   "email": "utilisateur@exemple.com",
+ *   "password": "motdepasse"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Inscription réussie"
+ * }
+ */
+
+/**
+ * POST /api/auth/logout
+ * Déconnecte l'utilisateur (révoque le token)
+ * 
+ * Body:
+ * {
+ *   "refreshToken": "refresh_token"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true
+ * }
+ */
+
+/**
+ * GET /api/auth/me
+ * Récupère les informations de l'utilisateur connecté
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "user": {
+ *     "id": "user_id",
+ *     "name": "Nom Utilisateur",
+ *     "email": "utilisateur@exemple.com",
+ *     "role": "user"
+ *   }
+ * }
+ */
+
+/**
+ * POST /api/auth/refresh-token
+ * Rafraîchit le token d'accès
+ * 
+ * Body:
+ * {
+ *   "refreshToken": "refresh_token"
+ * }
+ * 
+ * Response:
+ * {
+ *   "token": "new_jwt_token",
+ *   "refreshToken": "new_refresh_token",
+ *   "expiresIn": 3600
+ * }
+ */
+
+/**
+ * POST /api/auth/forgot-password
+ * Demande de réinitialisation du mot de passe
+ * 
+ * Body:
+ * {
+ *   "email": "utilisateur@exemple.com"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Instructions envoyées par email"
+ * }
+ */
+
+/**
+ * POST /api/auth/reset-password
+ * Réinitialise le mot de passe avec un token
+ * 
+ * Body:
+ * {
+ *   "token": "reset_token",
+ *   "password": "nouveau_mot_de_passe"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Mot de passe réinitialisé"
+ * }
+ */
+
+// ==========================================
+// ROUTES DE GESTION DES FICHIERS
+// ==========================================
+
+/**
+ * GET /api/files
+ * Récupère la liste des fichiers et dossiers
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Query params:
+ * path - Chemin du dossier à explorer (optionnel, racine par défaut)
+ * type - Type de fichiers à filtrer: all, video, audio, image (optionnel)
+ * 
+ * Response:
+ * {
+ *   "folders": [
+ *     {
+ *       "name": "Documents",
+ *       "path": "/Documents",
+ *       "modified": "2023-05-20T15:30:00Z",
+ *       "type": "folder"
+ *     }
+ *   ],
+ *   "files": [
+ *     {
+ *       "name": "video.mp4",
+ *       "path": "/video.mp4",
+ *       "size": 1024000,
+ *       "modified": "2023-05-20T15:30:00Z",
+ *       "type": "video",
+ *       "favorite": false
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * GET /api/files/search
+ * Recherche des fichiers
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Query params:
+ * query - Terme de recherche
+ * type - Type de fichiers: all, video, audio, image (optionnel)
+ * 
+ * Response:
+ * {
+ *   "folders": [...],
+ *   "files": [...]
+ * }
+ */
+
+/**
+ * GET /api/files/recent
+ * Récupère les fichiers récemment consultés
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Query params:
+ * limit - Nombre maximum de fichiers (optionnel, 20 par défaut)
+ * 
+ * Response:
+ * [
+ *   {
+ *     "name": "video.mp4",
+ *     "path": "/video.mp4",
+ *     "size": 1024000,
+ *     "modified": "2023-05-20T15:30:00Z",
+ *     "type": "video",
+ *     "lastViewed": "2023-05-22T10:15:00Z"
+ *   }
+ * ]
+ */
+
+/**
+ * GET /api/files/favorites
+ * Récupère les favoris de l'utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "files": [...],
+ *   "folders": [...]
+ * }
+ */
+
+/**
+ * POST /api/files/favorites
+ * Ajoute ou retire un élément des favoris
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "path": "/chemin/vers/fichier.mp4",
+ *   "type": "video", // ou "folder"
+ *   "favorite": true // ou false pour retirer
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Favori ajouté avec succès"
+ * }
+ */
+
+/**
+ * POST /api/files/upload
+ * Télécharge un fichier sur le serveur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * Content-Type: multipart/form-data
+ * 
+ * Form data:
+ * file - Fichier à télécharger
+ * 
+ * Query params:
+ * path - Chemin de destination (optionnel)
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "file": {
+ *     "name": "fichier.mp4",
+ *     "path": "/destination/fichier.mp4",
+ *     "size": 1024000,
+ *     "type": "video"
+ *   }
+ * }
+ */
+
+/**
+ * POST /api/files/share
+ * Partage un fichier ou un dossier
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "path": "/chemin/vers/fichier.mp4",
+ *   "expiresIn": 86400, // en secondes, optionnel
+ *   "requirePassword": false, // optionnel
+ *   "password": "motdepasse", // optionnel
+ *   "maxAccesses": 10 // optionnel
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "shareId": "share_id",
+ *   "shareUrl": "https://domaine.com/share/token",
+ *   "expiresAt": "2023-05-25T15:30:00Z" // optionnel
+ * }
+ */
+
+/**
+ * GET /api/files/shared
+ * Récupère les éléments partagés par l'utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * [
+ *   {
+ *     "_id": "share_id",
+ *     "media": {
+ *       "name": "fichier.mp4",
+ *       "path": "/chemin/vers/fichier.mp4",
+ *       "type": "video"
+ *     },
+ *     "shareUrl": "https://domaine.com/share/token",
+ *     "expiresAt": "2023-05-25T15:30:00Z",
+ *     "accessCount": 5,
+ *     "maxAccesses": 10
+ *   }
+ * ]
+ */
+
+/**
+ * DELETE /api/files/share/:shareId
+ * Supprime un partage
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "success": true
+ * }
+ */
+
+// ==========================================
+// ROUTES DE GESTION DES COLLECTIONS
+// ==========================================
+
+/**
+ * GET /api/files/collections
+ * Récupère les collections de l'utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "collections": [
+ *     {
+ *       "_id": "collection_id",
+ *       "name": "Vacances 2023",
+ *       "description": "Photos et vidéos de vacances",
+ *       "thumbnail": "url_thumbnail", // optionnel
+ *       "items": [] // optionnel, IDs des éléments
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * POST /api/files/collections
+ * Crée une nouvelle collection
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "name": "Nom de la collection",
+ *   "description": "Description de la collection" // optionnel
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "collection": {
+ *     "_id": "collection_id",
+ *     "name": "Nom de la collection",
+ *     "description": "Description de la collection"
+ *   }
+ * }
+ */
+
+/**
+ * GET /api/files/collections/:collectionId
+ * Récupère les détails d'une collection
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "_id": "collection_id",
+ *   "name": "Nom de la collection",
+ *   "description": "Description de la collection",
+ *   "thumbnail": "url_thumbnail", // optionnel
+ *   "createdAt": "2023-05-20T15:30:00Z",
+ *   "updatedAt": "2023-05-20T15:30:00Z"
+ * }
+ */
+
+/**
+ * GET /api/files/collections/:collectionId/items
+ * Récupère les éléments d'une collection
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * [
+ *   {
+ *     "name": "fichier.mp4",
+ *     "path": "/chemin/vers/fichier.mp4",
+ *     "size": 1024000,
+ *     "type": "video",
+ *     "modified": "2023-05-20T15:30:00Z"
+ *   }
+ * ]
+ */
+
+/**
+ * POST /api/files/collections/:collectionId/items
+ * Ajoute un élément à une collection
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "path": "/chemin/vers/fichier.mp4"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Élément ajouté à la collection"
+ * }
+ */
+
+/**
+ * DELETE /api/files/collections/:collectionId/items
+ * Retire un élément d'une collection
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "path": "/chemin/vers/fichier.mp4"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Élément retiré de la collection"
+ * }
+ */
+
+/**
+ * DELETE /api/files/collections/:collectionId
+ * Supprime une collection
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Collection supprimée"
+ * }
+ */
+
+// ==========================================
+// ROUTES DE MEDIA ET STREAMING
+// ==========================================
+
+/**
+ * GET /api/media/stream/:path
+ * Diffuse un fichier média en streaming
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * Range: bytes=0- (optionnel, pour la lecture partielle)
+ * 
+ * Query params:
+ * quality - Qualité vidéo: auto, 240p, 360p, 480p, 720p, 1080p (optionnel)
+ * format - Format vidéo: auto, mp4, webm, hls (optionnel)
+ * 
+ * Response:
+ * Flux binaire du média avec headers appropriés
+ */
+
+/**
+ * GET /api/media/thumbnail/:path
+ * Génère une miniature pour un média
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Query params:
+ * width - Largeur en pixels (optionnel)
+ * height - Hauteur en pixels (optionnel)
+ * time - Position temporelle pour les vidéos en secondes (optionnel)
+ * 
+ * Response:
+ * Image au format demandé
+ */
+
+/**
+ * GET /api/media/info/:path
+ * Récupère les métadonnées d'un fichier média
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "metadata": {
+ *     "size": 1024000,
+ *     "created": "2023-05-20T15:30:00Z",
+ *     "modified": "2023-05-20T15:30:00Z",
+ *     // Pour les vidéos
+ *     "width": 1920,
+ *     "height": 1080,
+ *     "duration": 120.5, // en secondes
+ *     "codec": "h264",
+ *     "bitrate": 5000000,
+ *     "fps": 30,
+ *     // Pour les audios
+ *     "duration": 180.2,
+ *     "codec": "aac",
+ *     "bitrate": 320000,
+ *     "sampleRate": 44100,
+ *     "channels": 2,
+ *     // Pour les images
+ *     "width": 1920,
+ *     "height": 1080,
+ *     "format": "jpeg",
+ *     "colorSpace": "sRGB"
+ *   }
+ * }
+ */
+
+/**
+ * GET /api/media/formats/:path
+ * Récupère les formats disponibles pour un fichier vidéo
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "formats": [
+ *     {
+ *       "format": "mp4",
+ *       "qualities": [
+ *         { "quality": "360p", "bitrate": 800000 },
+ *         { "quality": "720p", "bitrate": 2500000 }
+ *       ]
+ *     },
+ *     {
+ *       "format": "webm",
+ *       "qualities": [
+ *         { "quality": "360p", "bitrate": 700000 },
+ *         { "quality": "720p", "bitrate": 2300000 }
+ *       ]
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * GET /api/media/subtitles/:path
+ * Récupère les sous-titres disponibles pour une vidéo
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "subtitles": [
+ *     {
+ *       "lang": "fr",
+ *       "label": "Français",
+ *       "url": "/api/media/subtitle/path/to/video.mp4?lang=fr"
+ *     },
+ *     {
+ *       "lang": "en",
+ *       "label": "English",
+ *       "url": "/api/media/subtitle/path/to/video.mp4?lang=en"
+ *     }
+ *   ]
+ * }
+ */
+
+// ==========================================
+// ROUTES UTILISATEUR
+// ==========================================
+
+/**
+ * GET /api/users/profile
+ * Récupère le profil de l'utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "user": {
+ *     "id": "user_id",
+ *     "name": "Nom Utilisateur",
+ *     "email": "utilisateur@exemple.com",
+ *     "role": "user",
+ *     "createdAt": "2023-05-01T10:00:00Z"
+ *   }
+ * }
+ */
+
+/**
+ * PUT /api/users/profile
+ * Met à jour le profil de l'utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "name": "Nouveau Nom"
+ * }
+ * 
+ * Response:
+ * {
+ *   "user": {
+ *     "id": "user_id",
+ *     "name": "Nouveau Nom",
+ *     "email": "utilisateur@exemple.com",
+ *     "role": "user"
+ *   }
+ * }
+ */
+
+/**
+ * POST /api/users/change-password
+ * Change le mot de passe de l'utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "currentPassword": "ancien_mot_de_passe",
+ *   "newPassword": "nouveau_mot_de_passe"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Mot de passe modifié avec succès"
+ * }
+ */
+
+/**
+ * GET /api/users/preferences
+ * Récupère les préférences utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "language": "fr",
+ *   "defaultView": "grid",
+ *   "itemsPerPage": 50,
+ *   "autoplay": true
+ * }
+ */
+
+/**
+ * PUT /api/users/preferences
+ * Met à jour les préférences utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "language": "fr",
+ *   "defaultView": "grid",
+ *   "itemsPerPage": 50,
+ *   "autoplay": true
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "preferences": {
+ *     "language": "fr",
+ *     "defaultView": "grid",
+ *     "itemsPerPage": 50,
+ *     "autoplay": true
+ *   }
+ * }
+ */
+
+/**
+ * GET /api/users/sessions
+ * Récupère les sessions actives de l'utilisateur
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "sessions": [
+ *     {
+ *       "id": "session_id",
+ *       "device": "Chrome on Windows",
+ *       "ip": "192.168.1.1",
+ *       "lastActive": "2023-05-20T15:30:00Z",
+ *       "current": true
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * DELETE /api/users/sessions/:sessionId
+ * Révoque une session spécifique
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "success": true
+ * }
+ */
+
+/**
+ * DELETE /api/users/sessions
+ * Révoque toutes les sessions sauf la session courante
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "success": true
+ * }
+ */
+
+// ==========================================
+// ROUTES ADMINISTRATEUR
+// ==========================================
+
+/**
+ * GET /api/users
+ * Récupère la liste des utilisateurs (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "users": [
+ *     {
+ *       "id": "user_id",
+ *       "name": "Nom Utilisateur",
+ *       "email": "utilisateur@exemple.com",
+ *       "role": "user",
+ *       "createdAt": "2023-05-01T10:00:00Z",
+ *       "lastActive": "2023-05-20T15:30:00Z"
+ *     }
+ *   ]
+ * }
+ */
+
+/**
+ * GET /api/users/:userId
+ * Récupère les informations d'un utilisateur (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "user": {
+ *     "id": "user_id",
+ *     "name": "Nom Utilisateur",
+ *     "email": "utilisateur@exemple.com",
+ *     "role": "user",
+ *     "createdAt": "2023-05-01T10:00:00Z",
+ *     "lastActive": "2023-05-20T15:30:00Z",
+ *     "storage": {
+ *       "used": 1024000000,
+ *       "limit": 5368709120
+ *     }
+ *   }
+ * }
+ */
+
+/**
+ * PUT /api/users/:userId
+ * Met à jour les informations d'un utilisateur (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "name": "Nouveau Nom",
+ *   "role": "admin",
+ *   "storage": {
+ *     "limit": 10737418240
+ *   }
+ * }
+ * 
+ * Response:
+ * {
+ *   "user": {
+ *     "id": "user_id",
+ *     "name": "Nouveau Nom",
+ *     "email": "utilisateur@exemple.com",
+ *     "role": "admin",
+ *     "storage": {
+ *       "used": 1024000000,
+ *       "limit": 10737418240
+ *     }
+ *   }
+ * }
+ */
+
+/**
+ * DELETE /api/users/:userId
+ * Supprime un utilisateur (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Query params:
+ * deleteData - Supprimer également les données (true/false)
+ * 
+ * Response:
+ * {
+ *   "success": true
+ * }
+ */
+
+/**
+ * GET /api/admin/logs
+ * Récupère les journaux d'activité (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Query params:
+ * page - Numéro de page (optionnel)
+ * limit - Nombre d'entrées par page (optionnel)
+ * type - Type d'activité: login, upload, etc. (optionnel)
+ * userId - Filtre par utilisateur (optionnel)
+ * 
+ * Response:
+ * {
+ *   "logs": [
+ *     {
+ *       "id": "log_id",
+ *       "userId": "user_id",
+ *       "userName": "Nom Utilisateur",
+ *       "action": "login",
+ *       "details": { "ip": "192.168.1.1", "device": "Chrome on Windows" },
+ *       "timestamp": "2023-05-20T15:30:00Z"
+ *     }
+ *   ],
+ *   "pagination": {
+ *     "total": 100,
+ *     "page": 1,
+ *     "limit": 20,
+ *     "pages": 5
+ *   }
+ * }
+ */
+
+/**
+ * GET /api/admin/stats
+ * Récupère les statistiques globales (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "users": {
+ *     "total": 100,
+ *     "active": 80,
+ *     "new": 5 // derniers 7 jours
+ *   },
+ *   "storage": {
+ *     "total": 1073741824000,
+ *     "used": 536870912000,
+ *     "files": 5000
+ *   },
+ *   "activity": {
+ *     "logins": 150, // derniers 7 jours
+ *     "uploads": 50, // derniers 7 jours
+ *     "downloads": 200 // derniers 7 jours
+ *   }
+ * }
+ */
+
+/**
+ * GET /api/admin/settings
+ * Récupère les paramètres globaux (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Response:
+ * {
+ *   "registration": {
+ *     "enabled": true,
+ *     "requireApproval": false
+ *   },
+ *   "storage": {
+ *     "defaultLimit": 5368709120
+ *   },
+ *   "security": {
+ *     "maxLoginAttempts": 5,
+ *     "lockoutTime": 300, // secondes
+ *     "sessionTimeout": 3600 // secondes
+ *   }
+ * }
+ */
+
+/**
+ * PUT /api/admin/settings
+ * Met à jour les paramètres globaux (admin uniquement)
+ * 
+ * Headers:
+ * Authorization: Bearer jwt_token
+ * 
+ * Body:
+ * {
+ *   "registration": {
+ *     "enabled": true,
+ *     "requireApproval": true
+ *   },
+ *   "storage": {
+ *     "defaultLimit": 10737418240
+ *   }
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "settings": {
+ *     "registration": {
+ *       "enabled": true,
+ *       "requireApproval": true
+ *     },
+ *     "storage": {
+ *       "defaultLimit": 10737418240
+ *     },
+ *     "security": {
+ *       "maxLoginAttempts": 5,
+ *       "lockoutTime": 300,
+ *       "sessionTimeout": 3600
+ *     }
+ *   }
+ * }
+ */
+
+// ==========================================
+// ROUTES POUR LE CONTENU PARTAGÉ (ACCÈS PUBLIC)
+// ==========================================
+
+/**
+ * GET /api/shared/:token
+ * Récupère les informations sur un contenu partagé
+ * 
+ * Response:
+ * {
+ *   "media": {
+ *     "name": "fichier.mp4",
+ *     "type": "video",
+ *     "size": 1024000
+ *   },
+ *   "passwordRequired": false
+ * }
+ */
+
+/**
+ * POST /api/shared/:token/access
+ * Accède à un contenu partagé protégé par mot de passe
+ * 
+ * Body:
+ * {
+ *   "password": "mot_de_passe"
+ * }
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "accessToken": "access_token" // Token temporaire pour accéder au contenu
+ * }
+ */
+
+/**
+ * GET /api/shared/stream/:token
+ * Diffuse un contenu partagé en streaming
+ * 
+ * Query params:
+ * accessToken - Token d'accès (si protégé par mot de passe)
+ * quality - Qualité vidéo (optionnel)
+ * format - Format vidéo (optionnel)
+ * 
+ * Headers:
+ * Range: bytes=0- (optionnel, pour la lecture partielle)
+ * 
+ * Response:
+ * Flux binaire du média avec headers appropriés
+ */
+
+/**
+ * GET /api/shared/thumbnail/:token
+ * Génère une miniature pour un média partagé
+ * 
+ * Query params:
+ * accessToken - Token d'accès (si protégé par mot de passe)
+ * width - Largeur en pixels (optionnel)
+ * height - Hauteur en pixels (optionnel)
+ * time - Position temporelle pour les vidéos en secondes (optionnel)
+ * 
+ * Response:
+ * Image au format demandé
+ */
+
+/**
+ * GET /api/shared/download/:token
+ * Télécharge un fichier partagé
+ * 
+ * Query params:
+ * accessToken - Token d'accès (si protégé par mot de passe)
+ * 
+ * Response:
+ * Fichier à télécharger avec headers appropriés
+ */

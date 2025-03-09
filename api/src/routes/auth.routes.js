@@ -268,14 +268,7 @@ if (config.auth.googleClientId && config.auth.googleClientSecret) {
    */
   router.get('/google/callback', 
     passport.authenticate('google', { session: false }),
-    (req, res) => {
-      // Générer les tokens JWT
-      const user = req.user;
-      const token = '...'; // À implémenter
-      
-      // Rediriger vers l'application frontend avec les tokens
-      res.redirect(`${config.server.corsOrigin}/auth/callback?token=${token}`);
-    }
+    authController.googleCallback
   );
 }
 

@@ -5,6 +5,7 @@ import filesController from '../controllers/files.controller.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 import validatorMiddleware from '../middleware/validator.middleware.js';
 import cacheMiddleware from '../middleware/cache.middleware.js';
+import { uploadMiddleware } from '../middleware/upload.middleware.js';
 
 const router = express.Router();
 
@@ -94,6 +95,34 @@ router.get('/search', [
 
 /**
  * @swagger
+ * /files/recent:
+ *   get:
+ *     summary: Récupérer les fichiers récemment consultés
+ *     tags: [Files]
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Nombre maximum de fichiers
+ *     responses:
+ *       200:
+ *         description: Liste des fichiers récemment consultés
+ */
+router.get('/recent', [
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('La limite doit être un nombre entier entre 1 et 100'),
+  validatorMiddleware
+], filesController.getRecentFiles);
+
+/**
+ * @swagger
  * /files/collections:
  *   get:
  *     summary: Récupérer les collections de l'utilisateur
@@ -150,6 +179,64 @@ router.post('/collections', [
 
 /**
  * @swagger
+ * /files/collections/{id}:
+ *   get:
+ *     summary: Récupérer les détails d'une collection
+ *     tags: [Files]
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID de la collection
+ *     responses:
+ *       200:
+ *         description: Détails de la collection
+ *       404:
+ *         description: Collection non trouvée
+ */
+router.get('/collections/:id', [
+  param('id')
+    .isMongoId()
+    .withMessage('ID de collection invalide'),
+  validatorMiddleware
+], filesController.getCollection);
+
+/**
+ * @swagger
+ * /files/collections/{id}/items:
+ *   get:
+ *     summary: Récupérer les éléments d'une collection
+ *     tags: [Files]
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID de la collection
+ *     responses:
+ *       200:
+ *         description: Éléments de la collection
+ *       404:
+ *         description: Collection non trouvée
+ */
+router.get('/collections/:id/items', [
+  param('id')
+    .isMongoId()
+    .withMessage('ID de collection invalide'),
+  validatorMiddleware
+], filesController.getCollectionItems);
+
+/**
+ * @swagger
  * /files/collections/{id}/items:
  *   post:
  *     summary: Ajouter un élément à une collection
@@ -195,9 +282,9 @@ router.post('/collections/:id/items', [
 
 /**
  * @swagger
- * /files/collections/{id}/items/{itemIndex}:
+ * /files/collections/{id}/items:
  *   delete:
- *     summary: Supprimer un élément d'une collection
+ *     summary: Retire un élément d'une collection
  *     tags: [Files]
  *     security:
  *       - bearerAuth: []
@@ -209,33 +296,34 @@ router.post('/collections/:id/items', [
  *         schema:
  *           type: string
  *         description: ID de la collection
- *       - in: path
- *         name: itemIndex
- *         required: true
- *         schema:
- *           type: integer
- *         description: Index de l'élément à supprimer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - path
+ *             properties:
+ *               path:
+ *                 type: string
  *     responses:
  *       200:
- *         description: Élément supprimé
+ *         description: Élément retiré de la collection
  *       404:
- *         description: Collection non trouvée ou élément non trouvé
+ *         description: Collection non trouvée
  */
-router.delete('/collections/:id/items/:itemIndex', [
+router.delete('/collections/:id/items', [
   param('id')
     .isMongoId()
     .withMessage('ID de collection invalide'),
-  param('itemIndex')
-    .isInt({ min: 0 })
-    .withMessage('Index d\'élément invalide'),
+  body('path')
+    .notEmpty()
+    .withMessage('Le chemin est requis')
+    .isString()
+    .withMessage('Le chemin doit être une chaîne de caractères'),
   validatorMiddleware
-], (req, res, next) => {
-  // Implémenter la suppression d'un élément d'une collection
-  res.status(200).json({
-    success: true,
-    message: 'Élément supprimé de la collection'
-  });
-});
+], filesController.removeFromCollection);
 
 /**
  * @swagger
@@ -264,13 +352,7 @@ router.delete('/collections/:id', [
     .isMongoId()
     .withMessage('ID de collection invalide'),
   validatorMiddleware
-], (req, res, next) => {
-  // Implémenter la suppression d'une collection
-  res.status(200).json({
-    success: true,
-    message: 'Collection supprimée'
-  });
-});
+], filesController.deleteCollection);
 
 /**
  * @swagger
@@ -325,13 +407,59 @@ router.post('/favorites', [
     .isString()
     .withMessage('Le chemin doit être une chaîne de caractères'),
   body('type')
-    .isIn(['folder', 'collection'])
+    .isIn(['folder', 'collection', 'file'])
     .withMessage('Type invalide'),
   body('favorite')
     .isBoolean()
     .withMessage('La valeur favorite doit être un booléen'),
   validatorMiddleware
 ], filesController.toggleFavorite);
+
+/**
+ * @swagger
+ * /files/upload:
+ *   post:
+ *     summary: Télécharger un fichier sur le serveur
+ *     tags: [Files]
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     consumes:
+ *       - multipart/form-data
+ *     parameters:
+ *       - in: query
+ *         name: path
+ *         schema:
+ *           type: string
+ *         description: Chemin de destination
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Fichier téléchargé avec succès
+ *       400:
+ *         description: Erreur de validation
+ *       413:
+ *         description: Fichier trop volumineux
+ */
+router.post('/upload', [
+  query('path')
+    .optional()
+    .isString()
+    .withMessage('Le chemin doit être une chaîne de caractères'),
+  uploadMiddleware.single('file'),
+  validatorMiddleware
+], filesController.uploadFile);
 
 /**
  * @swagger
@@ -365,18 +493,6 @@ router.post('/favorites', [
  *     responses:
  *       200:
  *         description: Lien de partage créé
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 shareLink:
- *                   type: string
- *                 password:
- *                   type: string
- *                   description: Mot de passe si demandé
  */
 router.post('/share', [
   body('path')
@@ -401,13 +517,50 @@ router.post('/share', [
     .isBoolean()
     .withMessage('La valeur requireAccount doit être un booléen'),
   validatorMiddleware
-], (req, res, next) => {
-  // Implémenter le partage
-  res.status(200).json({
-    success: true,
-    shareLink: `${req.protocol}://${req.get('host')}/share/abc123`,
-    password: req.body.requirePassword ? 'motdepassegénéré' : null
-  });
-});
+], filesController.shareMedia);
+
+/**
+ * @swagger
+ * /files/shared:
+ *   get:
+ *     summary: Récupérer les éléments partagés par l'utilisateur
+ *     tags: [Files]
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Liste des éléments partagés
+ */
+router.get('/shared', filesController.getSharedItems);
+
+/**
+ * @swagger
+ * /files/share/{shareId}:
+ *   delete:
+ *     summary: Supprimer un partage
+ *     tags: [Files]
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: shareId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID du partage
+ *     responses:
+ *       200:
+ *         description: Partage supprimé
+ *       404:
+ *         description: Partage non trouvé
+ */
+router.delete('/share/:shareId', [
+  param('shareId')
+    .isString()
+    .withMessage('ID de partage invalide'),
+  validatorMiddleware
+], filesController.deleteShare);
 
 export default router;
